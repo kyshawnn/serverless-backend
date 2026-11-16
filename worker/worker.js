@@ -201,6 +201,15 @@ function parseDirectSokujaMirrors(html) {
   return ['480p', '720p', '1080p'].map((k) => qualityMap.get(k)).filter(Boolean);
 }
 
+function isKuronimeSlug(slug = '') {
+  const clean = String(slug || '').trim().toLowerCase();
+  if (!clean) return false;
+  if (clean.endsWith('-subtitle-indonesia') || clean.endsWith('-subtilte-indonesia')) {
+    return false;
+  }
+  return clean.startsWith('kuro-') || clean.startsWith('kuro-ep-') || clean.includes('kuronime.sbs');
+}
+
 async function handleStreams(url, sources) {
   const epSlug = (url.searchParams.get('epSlug') || '').trim().replace(/^\/+|\/+$/g, '');
   const animeSlug = (url.searchParams.get('animeSlug') || '').trim().replace(/^\/+|\/+$/g, '');
@@ -208,7 +217,7 @@ async function handleStreams(url, sources) {
   if (!epSlug) return jsonResponse({ error: 'epSlug required' }, 400, 10);
 
   // If Kuronime episode, let app use its full native CryptoJS/Pixeldrain/MP4Upload pipeline on-device unless direct MP4 found
-  if (epSlug.startsWith('kuro-') || animeSlug.startsWith('kuro-')) {
+  if (isKuronimeSlug(epSlug) || isKuronimeSlug(animeSlug)) {
     return jsonResponse({
       episodeSlug: epSlug,
       episodeNumber: epNum,
@@ -305,6 +314,47 @@ async function handleCoverProxy(url, sources) {
   });
 }
 
+async function handleSourceHtmlProxy(url, sources) {
+  const target = (url.searchParams.get('url') || '').trim();
+  if (!target || !/^https?:\/\//i.test(target)) {
+    return new Response('Bad target url', { status: 400, headers: corsHeaders() });
+  }
+  let parsedTarget;
+  try {
+    parsedTarget = new URL(target);
+  } catch {
+    return new Response('Invalid url', { status: 400, headers: corsHeaders() });
+  }
+  const host = parsedTarget.hostname.toLowerCase();
+  const isAllowed =
+    host.includes('kuronime') ||
+    host.includes('sokuja') ||
+    host.includes('kaerunime');
+  if (!isAllowed) {
+    return new Response('Forbidden target host', { status: 403, headers: corsHeaders() });
+  }
+  const referer = host.includes('kuronime')
+    ? `${sources.kuronimeBaseUrl}/`
+    : host.includes('kaerunime')
+      ? `${sources.kaerunimeBaseUrl}/`
+      : `${sources.sokujaBaseUrl}/`;
+  const res = await fetch(target, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      Referer: referer,
+      Accept: 'text/html,application/xhtml+xml,application/json,*/*;q=0.8'
+    },
+    redirect: 'follow'
+  });
+  return new Response(res.body, {
+    status: res.status,
+    headers: corsHeaders({
+      'Content-Type': res.headers.get('content-type') || 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=180'
+    })
+  });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -323,6 +373,8 @@ export default {
         return handleSearch(url, sources);
       case '/api/cover':
         return handleCoverProxy(url, sources);
+      case '/api/source-html':
+        return handleSourceHtmlProxy(url, sources);
       default:
         return jsonResponse({ error: 'Not found', path: url.pathname }, 404, 15);
     }
