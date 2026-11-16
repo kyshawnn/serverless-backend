@@ -1,0 +1,13 @@
+{
+  "version": 1794828691952,
+  "updatedAt": "2026-11-16T11:31:31.952Z",
+  "sources": {
+    "sokujaBaseUrl": "https://x6.sokuja.uk",
+    "kaerunimeBaseUrl": "https://kaerunime.vercel.app",
+    "kuronimeBaseUrl": "https://kuronime.sbs"
+  },
+  "features": {
+    "cdnCoversEnabled": true,
+    "workerStreamsEnabled": true
+  }
+}
