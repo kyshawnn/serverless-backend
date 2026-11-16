@@ -17,6 +17,14 @@ export const SOURCES = {
   kuronimeBaseUrl: (process.env.KURONIME_BASE_URL || 'https://kuronime.sbs').replace(/\/+$/, '')
 };
 
+const WORKER_PROXY_BASE = (
+  process.env.WORKER_BASE_URL ||
+  process.env.KYOUNIME_WORKER_BASE_URL ||
+  'https://kyounime-worker.noteee969.workers.dev'
+).replace(/\/+$/, '');
+
+const KURONIME_SEED_PATH = path.join(__dirname, 'kuronime-catalog.json');
+
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
@@ -76,12 +84,28 @@ export function cleanHtmlText(raw = '') {
     .trim();
 }
 
+export function isRealKuronimeSlug(slug = '') {
+  const clean = String(slug || '').trim().toLowerCase();
+  if (!clean) return false;
+  if (clean.endsWith('-subtitle-indonesia') || clean.endsWith('-subtilte-indonesia')) {
+    return false;
+  }
+  return clean.startsWith('kuro-') || clean.startsWith('kuro-ep-') || clean.includes('kuronime.sbs');
+}
+
 export function cleanAnimeTitle(raw = '') {
-  return cleanHtmlText(raw)
+  let cleaned = cleanHtmlText(raw)
     .replace(/^sinopsis\s+/i, '')
     .replace(/\s*(?:subtitle\s+indonesia|subtilte\s+indonesia|sub\s+indo)\s*$/i, '')
     .replace(/\s*\(TV\)\s*$/i, '')
     .trim();
+  if (/^["“].*["”]$/.test(cleaned) && cleaned.length >= 3) {
+    const inner = cleaned.slice(1, -1).trim();
+    if (inner && !inner.includes('"')) {
+      cleaned = inner;
+    }
+  }
+  return cleaned;
 }
 
 export function genreNameToSlug(raw = '') {
@@ -148,6 +172,11 @@ export function normalizeCanonicalAnimeKey(title = '', slug = '') {
     ['code geass lelouch of the rebellion', 'code geass hangyaku no lelouch'],
     ['kaguya sama love is war', 'kaguya sama wa kokurasetai'],
     ['kaguya sama wa kokurasetai tensai tachi no renai zunousen', 'kaguya sama wa kokurasetai'],
+    ['5 toubun no hanayome', 'gotoubun no hanayome'],
+    ['black clover sword of the wizard king', 'black clover movie mahou tei no ken'],
+    ['black clover mahou tei no ken', 'black clover movie mahou tei no ken'],
+    ['sword art online the movie 2 progressive', 'sword art online progressive movie'],
+    ['sword art online the movie progressive', 'sword art online progressive movie'],
     ['solo leveling', 'ore dake level up na ken'],
     ['kaiju no 8', 'kaijuu 8 gou'],
     ['the eminence in shadow', 'kage no jitsuryokusha ni naritakute'],
@@ -167,6 +196,7 @@ export function normalizeCanonicalAnimeKey(title = '', slug = '') {
     ['parasyte', 'kiseijuu sei no kakuritsu'],
     ['rascal does not dream of bunny girl senpai', 'seishun buta yarou wa bunny girl senpai no yume wo minai'],
     ['rascal does not dream', 'seishun buta yarou'],
+    ['seishun buta yarou wa bunny girl senpai no yume o minai', 'seishun buta yarou wa bunny girl senpai no yume wo minai'],
     ['food wars shokugeki no soma', 'shokugeki no souma'],
     ['food wars', 'shokugeki no souma'],
     ['shokugeki no soma', 'shokugeki no souma'],
@@ -174,11 +204,25 @@ export function normalizeCanonicalAnimeKey(title = '', slug = '') {
     ['danmachi', 'dungeon ni deai wo motomeru no wa machigatteiru darou ka'],
     ['kono subarashii sekai ni shukufuku wo', 'konosuba'],
     ['kono subarashii sekai ni shukufuku o', 'konosuba'],
+    ['god s blessing on this wonderful world', 'konosuba'],
     ['mushoku tensei jobless reincarnation', 'mushoku tensei'],
     ['re zero starting life in another world', 're zero kara hajimeru isekai seikatsu'],
+    ['the irregular at magic high school', 'mahouka koukou no rettousei'],
+    ['the misfit of demon king academy', 'maou gakuin no futekigousha'],
     ['black butler', 'kuroshitsuji'],
     ['kuroko s basketball', 'kuroko no basket'],
     ['kurokos basketball', 'kuroko no basket'],
+    ['love chunibyo other delusions', 'chuunibyou demo koi ga shitai'],
+    ['a certain magical index', 'toaru majutsu no index'],
+    ['a certain scientific railgun', 'toaru kagaku no railgun'],
+    ['fena pirate princess', 'kaizoku oujo'],
+    ['around 40 otoko no isekai tsuuhan seikatsu', 'around 40 otoko no isekai tsuuhan'],
+    ['tensei shitara dragon no tamago daatta', 'tensei shitara dragon no tamago datta'],
+    ['jujutsu kaisen the culling game part 1', 'jujutsu kaisen s3'],
+    ['bleach sennen kessen hen ketsubetsu tan part 2', 'bleach sennen kessen hen part 2'],
+    ['bleach sennen kessen hen soukoku tan part 3', 'bleach sennen kessen hen part 3'],
+    ['bleach sennen kessen hen kashin tan part 4', 'bleach sennen kessen hen part 4'],
+    ['bleach sennen kessen hen final part', 'bleach sennen kessen hen part 4'],
     ['86 eighty six', '86'],
     ['eighty six', '86']
   ];
@@ -187,11 +231,36 @@ export function normalizeCanonicalAnimeKey(title = '', slug = '') {
   }
 
   return normalized
+    .replace(/\b(?:the\s+movie|movie|film|gekijouban)\s+0*(\d+)\s+(?:the\s+movie|movie|film|gekijouban)\b/g, 'movie $1')
     .replace(/\b(?:the\s+movie|movie|film|gekijouban)\s+0*(\d+)\b/g, 'movie $1')
     .replace(/\b(?:the\s+movie|film|gekijouban)\b/g, 'movie')
     .replace(/\b(?:ova|oad)\s*0*(\d+)\b/g, 'ova $1')
     .replace(/\b(?:ona)\s*0*(\d+)\b/g, 'ona $1')
     .replace(/\b(?:special|sp)\s*0*(\d+)\b/g, 'special $1')
+    .replace(/\bone piece movie 15 red\b/g, 'one piece movie red')
+    .replace(/\bone piece movie 15\b/g, 'one piece movie red')
+    .replace(/\bmugen\s+ressha\s+hen(?:\s+season\s*2|\s+s2)?\b/g, 'mugen ressha hen')
+    .replace(/\byuukaku\s+hen(?:\s+season\s*3|\s+s3)?\b/g, 'yuukaku hen')
+    .replace(/\bkatanakaji\s+no\s+sato\s+hen(?:\s+season\s*4|\s+s4)?\b/g, 'katanakaji no sato hen')
+    .replace(/\b(?:arc\s+)?hashira\s+geiko\s+hen(?:\s+season\s*5|\s+s5)?\b/g, 'hashira geiko hen')
+    .replace(/\bstone\s+wars(?:\s+season\s*2|\s+s2)?\b/g, 'stone wars')
+    .replace(/\bseiya\s+kessen\s+hen(?:\s+season\s*2|\s+s2)?\b/g, 'seiya kessen hen')
+    .replace(/\bkyoto\s+fujouou\s+hen\b/g, '')
+    .replace(/\bshimane\s+illuminati\s+hen\b/g, '')
+    .replace(/\byuki\s+no\s+hate\s+hen\b/g, '')
+    .replace(/\byosuga\s+hen\b/g, '')
+    .replace(/\b(season\s*0*1|1st\s+season|s0*1)\b/g, ' ')
+    .replace(/\bseason\s*0*([2-9]\d*)\b/g, 's$1')
+    .replace(/\b([2-9]\d*)(?:nd|rd|th)\s+season\b/g, 's$1')
+    .replace(/\bpart\s+ii\b/g, 'p2')
+    .replace(/\bpart\s+iii\b/g, 'p3')
+    .replace(/\bpart\s+iv\b/g, 'p4')
+    .replace(/\bpart\s*0*([1-9])\b/g, 'p$1')
+    .replace(/\bcour\s*0*([1-9])\b/g, 'cour$1')
+    .replace(/(?<=\S)\s+(ii)\b/g, ' s2')
+    .replace(/(?<=\S)\s+(iii)\b/g, ' s3')
+    .replace(/(?<=\S)\s+(iv)\b/g, ' s4')
+    .replace(/(?<=\S)\s+(v)\b(?=\s*$)/g, ' s5')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -501,9 +570,11 @@ export function cleanMergedCatalog(sokujaItems = [], kuronimeItems = []) {
 
   const absorb = (item, isSecondary) => {
     if (!item || !item.slug || !item.title || /^sinopsis\b/i.test(item.title) || !item.coverUrl) return;
+    const cleanTitle = cleanAnimeTitle(item.title);
+    if (!cleanTitle || /^sinopsis\b/i.test(cleanTitle)) return;
     const slugKey = item.slug.trim().toLowerCase();
-    const titleKey = item.title.trim().toLowerCase();
-    const canonicalKey = normalizeCanonicalAnimeKey(item.title, item.slug);
+    const titleKey = cleanTitle.toLowerCase();
+    const canonicalKey = normalizeCanonicalAnimeKey(cleanTitle, item.slug) || slugKey;
 
     if (byCanonical.has(canonicalKey)) {
       const existing = byCanonical.get(canonicalKey);
@@ -518,19 +589,22 @@ export function cleanMergedCatalog(sokujaItems = [], kuronimeItems = []) {
       return;
     }
 
-    if (isSecondary) {
-      if (seenCanonical.has(canonicalKey) || seenSlugs.has(slugKey) || seenTitles.has(titleKey)) {
-        return;
-      }
+    if (seenCanonical.has(canonicalKey) || seenSlugs.has(slugKey) || seenTitles.has(titleKey)) {
+      return;
     }
-    if (!seenSlugs.add(slugKey) || !seenTitles.add(titleKey)) return;
+    if (isSecondary && seenCanonical.has(canonicalKey)) {
+      return;
+    }
+    seenSlugs.add(slugKey);
+    seenTitles.add(titleKey);
     if (canonicalKey) seenCanonical.add(canonicalKey);
 
     const copy = {
       ...item,
+      title: cleanTitle,
       genres: Array.isArray(item.genres) ? Array.from(new Set(item.genres)) : []
     };
-    byCanonical.set(canonicalKey || slugKey, copy);
+    byCanonical.set(canonicalKey, copy);
   };
 
   for (const s of sokujaItems) absorb(s, false);
@@ -541,7 +615,7 @@ export function cleanMergedCatalog(sokujaItems = [], kuronimeItems = []) {
   );
 }
 
-async function fetchTextWithRetry(url, referer = '', retries = 2, timeoutMs = 10000) {
+async function fetchTextWithRetry(url, referer = '', retries = 2, timeoutMs = 10000, allowWorkerProxy = false) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -558,7 +632,7 @@ async function fetchTextWithRetry(url, referer = '', retries = 2, timeoutMs = 10
         await new Promise((r) => setTimeout(r, 700 * attempt));
         continue;
       }
-      if (res.status >= 400 && res.status < 500) return '';
+      if (res.status >= 400 && res.status < 500) break;
     } catch {
       clearTimeout(timer);
     }
@@ -566,11 +640,31 @@ async function fetchTextWithRetry(url, referer = '', retries = 2, timeoutMs = 10
       await new Promise((r) => setTimeout(r, 300 * attempt));
     }
   }
+
+  if (allowWorkerProxy && WORKER_PROXY_BASE) {
+    for (const proxyPath of ['/api/source-html', '/api/cover']) {
+      try {
+        const proxyUrl = `${WORKER_PROXY_BASE}${proxyPath}?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl, {
+          headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/json,*/*;q=0.8' },
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+        if (res.ok) {
+          const text = await res.text();
+          if (text && (text.includes('<article') || text.includes('entry-content') || text.includes('lchx') || text.startsWith('{'))) {
+            return text;
+          }
+        }
+      } catch {
+        // try next proxy route
+      }
+    }
+  }
   return '';
 }
 
 async function fetchJsonWithRetry(url, retries = 2) {
-  const txt = await fetchTextWithRetry(url, '', retries, 10000);
+  const txt = await fetchTextWithRetry(url, '', retries, 10000, false);
   if (!txt) return null;
   try {
     return JSON.parse(txt);
@@ -712,9 +806,9 @@ export function buildDetailPayload(anime, scraped = {}) {
 }
 
 async function scrapeAnimeDetail(anime) {
-  if (anime.slug.startsWith('kuro-')) {
+  if (isRealKuronimeSlug(anime.slug)) {
     const rawSlug = resolveKuronimeCanonicalSlug(anime.slug);
-    const html = await fetchTextWithRetry(`${SOURCES.kuronimeBaseUrl}/anime/${rawSlug}/`, `${SOURCES.kuronimeBaseUrl}/`, 1, 9000);
+    const html = await fetchTextWithRetry(`${SOURCES.kuronimeBaseUrl}/anime/${rawSlug}/`, `${SOURCES.kuronimeBaseUrl}/`, 1, 8000, true);
     if (!html) return buildDetailPayload(anime);
 
     const epRegex = /<a\b[^>]*href=["'](https?:\/\/[^"']*kuronime[^"']*\/([^/"']+)\/?)["'][^>]*>[\s\S]*?(?:Episode|Eps?)\s*(\d+)/gi;
@@ -733,7 +827,7 @@ async function scrapeAnimeDetail(anime) {
     return buildDetailPayload(anime, { synopsis, episodes });
   }
 
-  const html = await fetchTextWithRetry(`${SOURCES.kaerunimeBaseUrl}/detail/${anime.slug}`, '', 1, 9000);
+  const html = await fetchTextWithRetry(`${SOURCES.kaerunimeBaseUrl}/detail/${anime.slug}`, '', 1, 9000, false);
   if (!html) return buildDetailPayload(anime);
 
   for (const rawPush of extractNextRscPayloads(html)) {
@@ -774,6 +868,34 @@ async function scrapeAnimeDetail(anime) {
   return buildDetailPayload(anime);
 }
 
+async function loadKuronimeSeedCatalog() {
+  try {
+    const raw = await fs.readFile(KURONIME_SEED_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || !item.slug || !item.title || !item.coverUrl) return null;
+        const cleanTitle = cleanAnimeTitle(item.title);
+        if (!cleanTitle || /^sinopsis\b/i.test(cleanTitle)) return null;
+        return {
+          ...item,
+          title: cleanTitle,
+          backdropUrl: item.backdropUrl || item.coverUrl,
+          rating: formatScore(item.rating || '8.0'),
+          type: item.type || 'TV',
+          studio: item.studio || '-',
+          status: item.status || 'Completed',
+          genres: Array.isArray(item.genres) ? item.genres : [],
+          synopsis: typeof item.synopsis === 'string' ? cleanHtmlText(item.synopsis) : ''
+        };
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 async function main() {
   const forceRefreshCovers = process.env.REFRESH_COVERS === 'true';
   await Promise.all([
@@ -790,25 +912,29 @@ async function main() {
     console.warn('[sync] sharp unavailable, storing raw downloaded image bytes');
   }
 
-  console.log('[sync] Fetching home & genres...');
-  const homeHtml = await fetchTextWithRetry(SOURCES.kaerunimeBaseUrl);
+  console.log('[sync] Loading verified Kuronime seed & fetching home + genres...');
+  const [homeHtml, seedKuronime] = await Promise.all([
+    fetchTextWithRetry(SOURCES.kaerunimeBaseUrl),
+    loadKuronimeSeedCatalog()
+  ]);
   const parsedHome = parseKaerunimeRscHome(homeHtml);
 
   const sokujaPool = [];
-  const kuronimePool = [];
+  const kuronimePool = [...seedKuronime];
+  console.log(`[sync] Loaded ${seedKuronime.length} verified Kuronime seed items.`);
 
   if (parsedHome) {
     sokujaPool.push(...parsedHome.ongoing, ...parsedHome.popular, ...parsedHome.movies);
   }
 
-  // Scrape Sokuja archive pages 1..75 (stops cleanly when a page returns empty)
-  for (let start = 1; start <= 75; start += 8) {
-    const batch = Array.from({ length: Math.min(8, 76 - start) }, (_, i) => start + i);
+  // Scrape Sokuja archive pages 1..60 (with Worker proxy fallback if datacenter IP blocked)
+  for (let start = 1; start <= 60; start += 8) {
+    const batch = Array.from({ length: Math.min(8, 61 - start) }, (_, i) => start + i);
     const results = await runPool(batch, 4, async (page) => {
       const url = page === 1
         ? `${SOURCES.sokujaBaseUrl}/anime/`
         : `${SOURCES.sokujaBaseUrl}/anime/page/${page}/`;
-      const html = await fetchTextWithRetry(url, SOURCES.sokujaBaseUrl);
+      const html = await fetchTextWithRetry(url, SOURCES.sokujaBaseUrl, 2, 9000, true);
       return parseSokujaHtmlArticles(html);
     });
     const flat = results.flat();
@@ -817,35 +943,55 @@ async function main() {
     await new Promise((r) => setTimeout(r, 150));
   }
 
-  // Fetch all 27 genres from Kaerunime API + Kuronime
+  // Fetch all 27 genres dynamically up to maxPage (<= 35) from Kaerunime API + live Kuronime
   const genreCacheBySlug = {};
   await runPool(ALL_GENRE_SLUGS, 4, async (genreSlug) => {
     const kaeruItems = [];
     if (genreSlug === 'movie') {
       for (let p = 1; p <= 8; p++) {
-        const html = await fetchTextWithRetry(`${SOURCES.sokujaBaseUrl}/anime/page/${p}/?type=movie&order=update`, SOURCES.sokujaBaseUrl);
+        const movieUrl = p === 1
+          ? `${SOURCES.sokujaBaseUrl}/anime/?type=movie&order=update`
+          : `${SOURCES.sokujaBaseUrl}/anime/page/${p}/?type=movie&order=update`;
+        const html = await fetchTextWithRetry(movieUrl, SOURCES.sokujaBaseUrl, 1, 8000, true);
         const parsed = parseSokujaHtmlArticles(html);
         if (parsed.length === 0) break;
         kaeruItems.push(...parsed.map((item) => ({ ...item, type: 'Movie', genres: ['Movie'] })));
       }
     }
-    for (let p = 1; p <= 12; p++) {
-      const json = await fetchJsonWithRetry(`${SOURCES.kaerunimeBaseUrl}/api/genre?slug=${encodeURIComponent(genreSlug)}&page=${p}&sort=popular`);
-      const items = parseJsonAnimeArray(json?.items || json?.results || json?.data);
-      if (items.length === 0) break;
-      kaeruItems.push(...items.map((item) => ({
+
+    const firstJson = await fetchJsonWithRetry(`${SOURCES.kaerunimeBaseUrl}/api/genre?slug=${encodeURIComponent(genreSlug)}&page=1&sort=popular`);
+    const firstItems = parseJsonAnimeArray(firstJson?.items || firstJson?.results || firstJson?.data);
+    if (firstItems.length > 0) {
+      kaeruItems.push(...firstItems.map((item) => ({
         ...item,
         genres: Array.from(new Set([...(item.genres || []), genreSlug]))
       })));
-      if (json && json.hasNextPage === false && json.hasMore === false) break;
+      const maxPage = Math.min(35, Math.max(1, Number(firstJson?.maxPage || firstJson?.totalPages || 1)));
+      if (maxPage > 1) {
+        const restPages = Array.from({ length: maxPage - 1 }, (_, i) => i + 2);
+        const restResults = await runPool(restPages, 4, async (p) => {
+          const json = await fetchJsonWithRetry(`${SOURCES.kaerunimeBaseUrl}/api/genre?slug=${encodeURIComponent(genreSlug)}&page=${p}&sort=popular`);
+          return parseJsonAnimeArray(json?.items || json?.results || json?.data).map((item) => ({
+            ...item,
+            genres: Array.from(new Set([...(item.genres || []), genreSlug]))
+          }));
+        });
+        kaeruItems.push(...restResults.flat());
+      }
     }
 
-    const kuroItems = [];
-    for (let p = 1; p <= 2; p++) {
+    const seedGenreKuro = seedKuronime.filter((item) =>
+      genreSlug === 'movie'
+        ? item.type === 'Movie' || item.genres.some((g) => genreNameToSlug(g) === 'movie')
+        : item.genres.some((g) => genreNameToSlug(g) === genreSlug)
+    );
+
+    const kuroItems = [...seedGenreKuro];
+    for (let p = 1; p <= 3; p++) {
       const url = p === 1
         ? `${SOURCES.kuronimeBaseUrl}/genres/${genreSlug}/`
         : `${SOURCES.kuronimeBaseUrl}/genres/${genreSlug}/page/${p}/`;
-      const html = await fetchTextWithRetry(url, SOURCES.kuronimeBaseUrl);
+      const html = await fetchTextWithRetry(url, SOURCES.kuronimeBaseUrl, 1, 8000, true);
       const parsed = parseKuronimeHtmlCards(html, [genreSlug]);
       if (parsed.length === 0) break;
       kuroItems.push(...parsed);
@@ -856,14 +1002,14 @@ async function main() {
     genreCacheBySlug[genreSlug] = cleanMergedCatalog(kaeruItems, kuroItems);
   });
 
-  // Fetch Kuronime main popular archive pages 1..20
+  // Fetch Kuronime main popular archive pages 1..20 (with Worker proxy fallback)
   for (let start = 1; start <= 20; start += 4) {
     const batch = Array.from({ length: Math.min(4, 21 - start) }, (_, i) => start + i);
     const results = await runPool(batch, 4, async (page) => {
       const url = page === 1
         ? `${SOURCES.kuronimeBaseUrl}/anime/?order=popular`
         : `${SOURCES.kuronimeBaseUrl}/anime/page/${page}/?order=popular`;
-      const html = await fetchTextWithRetry(url, SOURCES.kuronimeBaseUrl);
+      const html = await fetchTextWithRetry(url, SOURCES.kuronimeBaseUrl, 1, 8000, true);
       return parseKuronimeHtmlCards(html);
     });
     const flat = results.flat();
@@ -876,7 +1022,7 @@ async function main() {
 
   // Mirror covers to compressed .webp in parallel waves
   const coverBySlug = new Map();
-  await runPool(fullCatalog, 8, async (anime) => {
+  await runPool(fullCatalog, 12, async (anime) => {
     const webpPath = await mirrorCoverToWebp(anime, sharpMod, forceRefreshCovers);
     coverBySlug.set(anime.slug, webpPath);
     anime.coverUrl = webpPath;
@@ -911,7 +1057,7 @@ async function main() {
   // Build / refresh detail payloads incrementally (always refresh ongoing + missing details)
   const ongoingSlugs = new Set((parsedHome?.ongoing || []).map((a) => a.slug));
   const detailBundle = {};
-  await runPool(fullCatalog, 6, async (anime) => {
+  await runPool(fullCatalog, 10, async (anime) => {
     const detailFile = path.join(DETAILS_DIR, `${sanitizeSlugFilename(anime.slug)}.json`);
     let detail = null;
     if (!ongoingSlugs.has(anime.slug)) {

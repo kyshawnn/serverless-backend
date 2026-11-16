@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import test from 'node:test';
 import {
   buildDetailPayload,
+  cleanAnimeTitle,
   cleanMergedCatalog,
+  isRealKuronimeSlug,
   normalizeCanonicalAnimeKey,
   parseKuronimeHtmlCards,
   parseSokujaHtmlArticles,
@@ -104,4 +107,49 @@ test('normalizeCanonicalAnimeKey, sanitizeSlugFilename, and buildDetailPayload p
   });
   assert.equal(detail.episodes.length, 1);
   assert.equal(detail.coverUrl, '/covers/solo-leveling.webp');
+});
+
+test('strict cross-source duplicate prevention handles quotes, Season 1, Roman numerals, and kuro- Sokuja slugs', () => {
+  assert.equal(isRealKuronimeSlug('kuro-no-shoukanshi-subtitle-indonesia'), false);
+  assert.equal(isRealKuronimeSlug('kuro-naruto-kecil'), true);
+  assert.equal(isRealKuronimeSlug('kuro-ep-naruto-1'), true);
+
+  assert.equal(cleanAnimeTitle('"Oshi no Ko"'), 'Oshi no Ko');
+
+  const sokuja = [
+    { slug: 'oshi-no-ko-subtitle-indonesia', title: '"Oshi no Ko"', coverUrl: 'https://sokuja/onk.jpg', genres: ['Drama'] },
+    { slug: 'ao-no-exorcist-season-1-subtitle-indonesia', title: 'Ao no Exorcist Season 1', coverUrl: 'https://sokuja/ane1.jpg', genres: ['Action'] },
+    { slug: 'tensei-shitara-ken-deshita-ii-subtitle-indonesia', title: 'Tensei shitara Ken deshita II', coverUrl: 'https://sokuja/ken2.jpg', genres: ['Action'] },
+    { slug: 'bleach-tybw-2-subtitle-indonesia', title: 'Bleach: Sennen Kessen-hen: Ketsubetsu-tan part 2', coverUrl: 'https://sokuja/bl2.jpg', genres: ['Action'] },
+    { slug: 'haikyuu-subtitle-indonesia', title: 'Haikyuu!!', coverUrl: 'https://sokuja/hq1.jpg', genres: ['Sports'] }
+  ];
+
+  const kuronime = [
+    { slug: 'kuro-oshi-no-ko', title: 'Oshi no Ko', coverUrl: 'https://kuro/onk.jpg', genres: ['Drama'] },
+    { slug: 'kuro-ao-no-exorcist', title: 'Ao no Exorcist', coverUrl: 'https://kuro/ane.jpg', genres: ['Action'] },
+    { slug: 'kuro-tensei-shitara-ken-deshita-season-2', title: 'Tensei shitara Ken deshita Season 2', coverUrl: 'https://kuro/ken2.jpg', genres: ['Action'] },
+    { slug: 'kuro-bleach-sennen-kessen-hen-part-2', title: 'Bleach: Sennen Kessen-hen Part 2', coverUrl: 'https://kuro/bl2.jpg', genres: ['Action'] },
+    { slug: 'kuro-haikyuu-season-2', title: 'Haikyuu!! Season 2', coverUrl: 'https://kuro/hq2.jpg', genres: ['Sports'] },
+    { slug: 'kuro-haikyuu-season-3', title: 'Haikyuu!! Season 3', coverUrl: 'https://kuro/hq3.jpg', genres: ['Sports'] }
+  ];
+
+  const merged = cleanMergedCatalog(sokuja, kuronime);
+  // 5 Sokuja items + only 2 unique Kuronime items (Haikyuu S2 and Haikyuu S3) = 7 total
+  assert.equal(merged.length, 7);
+  assert.equal(merged.some((a) => a.slug === 'kuro-oshi-no-ko'), false);
+  assert.equal(merged.some((a) => a.slug === 'kuro-ao-no-exorcist'), false);
+  assert.equal(merged.some((a) => a.slug === 'kuro-tensei-shitara-ken-deshita-season-2'), false);
+  assert.equal(merged.some((a) => a.slug === 'kuro-bleach-sennen-kessen-hen-part-2'), false);
+  assert.equal(merged.some((a) => a.slug === 'kuro-haikyuu-season-2'), true);
+  assert.equal(merged.some((a) => a.slug === 'kuro-haikyuu-season-3'), true);
+});
+
+test('kuronime-catalog.json verified seed contains 2000+ unique entries and 300+ Action titles', async () => {
+  const raw = JSON.parse(await fs.readFile(new URL('./kuronime-catalog.json', import.meta.url), 'utf8'));
+  assert.ok(Array.isArray(raw));
+  assert.ok(raw.length >= 2000, `Expected >= 2000 seed items, got ${raw.length}`);
+  const actionCount = raw.filter((item) => Array.isArray(item.genres) && item.genres.some((g) => g.toLowerCase() === 'action')).length;
+  assert.ok(actionCount >= 300, `Expected >= 300 Action items, got ${actionCount}`);
+  const keys = new Set(raw.map((item) => normalizeCanonicalAnimeKey(item.title, item.slug)));
+  assert.equal(keys.size, raw.length, 'Seed catalog must contain zero canonical duplicates');
 });
