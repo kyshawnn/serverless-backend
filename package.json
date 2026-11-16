@@ -1,0 +1,17 @@
+{
+  "name": "kyounime-serverless-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Serverless catalog aggregator, WebP cover mirror CDN, and edge stream resolver for Kyounime",
+  "scripts": {
+    "sync": "node scripts/sync-catalog.mjs",
+    "test": "node --test scripts/*.test.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
