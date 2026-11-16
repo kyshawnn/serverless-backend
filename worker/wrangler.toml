@@ -1,0 +1,11 @@
+name = "kyounime-edge-worker"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# Isi setelah Cloudflare Pages aktif, misal: "https://kyounime-cdn.pages.dev"
+CDN_BASE_URL = ""
+# Domain sumber default (bisa di-override dinamis via api/config.json di CDN tanpa deploy ulang)
+DEFAULT_SOKUJA_BASE_URL = "https://x6.sokuja.uk"
+DEFAULT_KAERUNIME_BASE_URL = "https://kaerunime.vercel.app"
+DEFAULT_KURONIME_BASE_URL = "https://kuronime.sbs"
